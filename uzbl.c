@@ -86,6 +86,7 @@ const struct {
 /*    variable name           pointer to variable in code                         variable type      callback function  */
 /*  ------------------------------------------------------------------------------------------------------------------- */
     { "uri",                {.ptr = (void *)&uzbl.state.uri,                   .type = TYPE_STRING, .func = cmd_load_uri}},
+    { "uri",                {.ptr = (void *)&uzbl.state.home_uri,              .type = TYPE_STRING, .func = cmd_load_uri}},
     { "status_message",     {.ptr = (void *)&uzbl.gui.sbar.msg,                .type = TYPE_STRING, .func = update_title}},
     { "show_status",        {.ptr = (void *)&uzbl.behave.show_status,          .type = TYPE_INT,    .func = cmd_set_status}},
     { "status_top",         {.ptr = (void *)&uzbl.behave.status_top,           .type = TYPE_INT,    .func = move_statusbar}},
@@ -197,6 +198,7 @@ clean_up(void) {
     if (uzbl.behave.socket_dir)
         unlink (uzbl.comm.socket_path);
 
+    g_free(uzbl.state.home_uri);
     g_free(uzbl.state.executable_path);
     g_string_free(uzbl.state.keycmd, TRUE);
     g_hash_table_destroy(uzbl.bindings);
@@ -1872,8 +1874,10 @@ main (int argc, char* argv[]) {
     create_stdin();
 
     if(uzbl.state.uri) {
+        cmd_load_uri();
+    } else if (uzbl.state.home_uri) {
         GArray *a = g_array_new (TRUE, FALSE, sizeof(gchar*));
-        g_array_append_val(a, uzbl.state.uri);
+        g_array_append_val(a, uzbl.state.home_uri);
         load_uri (uzbl.gui.web_view, a);
         g_array_free (a, TRUE);
     }

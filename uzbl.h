@@ -103,6 +103,7 @@ typedef struct {
 /* internal state */
 typedef struct {
     gchar    *uri;
+    gchar    *home_uri;
     gchar    *config_file;
     char    *instance_name;
     gchar    *selected_url;

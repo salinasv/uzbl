@@ -112,4 +112,4 @@ bind    F= script for (var i=0; i < document.links.length; i++) {var uzblid = 'u
 bind    f_        = script window.location = document.links[%s].href;
 
 # "home" page if you will
-set uri = uzbl.org
+set home_uri = uzbl.org
