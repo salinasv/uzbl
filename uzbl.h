@@ -11,9 +11,6 @@
  *
  */
 
-#define STATUS_DEFAULT "<span background=\"darkblue\" foreground=\"white\"> MODE </span> <span background=\"red\" foreground=\"white\">KEYCMD</span> (LOAD_PROGRESS%)  <b>TITLE</b>  - Uzbl browser"
-#define TITLE_LONG_DEFAULT "KEYCMD MODE TITLE - Uzbl browser <NAME> > SELECTED_URI"
-#define TITLE_SHORT_DEFAULT "TITLE - Uzbl browser <NAME>"
 #define NOSPLIT ((void*)1)
 
 enum {
@@ -62,6 +59,8 @@ const struct {
 typedef struct {
     gint           load_progress;
     gchar          *msg;
+    gchar          *progress_s, *progress_u;
+    int            progress_w;
 } StatusBar;
 
 
@@ -96,7 +95,7 @@ typedef struct {
     GRegex         *keycmd_regex;
     GRegex         *get_regex;
     GRegex         *bind_regex;
-    gchar          **sync_stdout;
+    gchar          *sync_stdout;
 } Communication;
 
 
@@ -109,7 +108,7 @@ typedef struct {
     gchar    *selected_url;
     gchar    *executable_path;
     GString* keycmd;
-    gchar    *searchtx;
+    gchar*   searchtx;
     struct utsname unameinfo; /* system info */
     gboolean verbose;
 } State;
@@ -148,8 +147,10 @@ typedef struct {
     gchar*   modkey;
     guint    modmask;
     guint    http_debug;
-    guint    default_font_size;
+    guint    font_size;
+    guint    monospace_size;
     guint    minimum_font_size;
+    guint    disable_plugins;
     gchar*   shell_cmd;
 
     /* command list: name -> Command  */
@@ -205,6 +206,12 @@ itos(int val);
 
 static char *
 str_replace (const char* search, const char* replace, const char* string);
+
+static GArray*
+read_file_by_line (gchar *path);
+
+static
+gchar* parseenv (char* string);
 
 static void
 clean_up(void);
@@ -264,7 +271,7 @@ static bool
 file_exists (const char * filename);
 
 static void
-set_insert_mode(WebKitWebView *page, GArray *argv);
+toggle_insert_mode(WebKitWebView *page, GArray *argv);
 
 static void
 load_uri (WebKitWebView * web_view, GArray *argv);
@@ -286,6 +293,12 @@ static void
 spawn_sh(WebKitWebView *web_view, GArray *argv);
 
 static void
+spawn_sync(WebKitWebView *web_view, GArray *argv);
+
+static void
+spawn_sh_sync(WebKitWebView *web_view, GArray *argv);
+
+static void
 parse_command(const char *cmd, const char *param);
 
 static void
@@ -296,9 +309,6 @@ parse_cmd_line(const char *ctl_line);
 
 static gchar*
 build_stream_name(int type, const gchar *dir);
-
-static gchar*
-set_useragent(gchar *val);
 
 static gboolean
 control_fifo(GIOChannel *gio, GIOCondition condition);
@@ -322,7 +332,7 @@ static void
 update_title (void);
 
 static gboolean
-key_press_cb (WebKitWebView* page, GdkEventKey* event);
+key_press_cb (GtkWidget* window, GdkEventKey* event);
 
 static void
 run_keycmd(const gboolean key_ret);
@@ -363,6 +373,9 @@ search_reverse_text (WebKitWebView *page, GArray *argv);
 static void
 run_js (WebKitWebView * web_view, GArray *argv);
 
+static void
+run_external_js (WebKitWebView * web_view, GArray *argv);
+
 static void handle_cookies (SoupSession *session,
 							SoupMessage *msg,
 							gpointer     user_data);
@@ -381,6 +394,9 @@ static void
 set_proxy_url();
 
 static void
+cmd_cookie_handler();
+
+static void
 move_statusbar();
 
 static void
@@ -396,7 +412,10 @@ static void
 cmd_max_conns_host();
 
 static void
-cmd_default_font_size();
+cmd_font_size();
+
+static void
+cmd_disable_plugins();
 
 static void
 cmd_minimum_font_size();

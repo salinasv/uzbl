@@ -53,8 +53,9 @@ Time to change that!
 
 
 ### CONFIGURATION / CONTROL:
-The general idea is that uzbl by default is very bare bones.  you can send it commands to update settings and perform actions, through various interfaces. (TODO: some default settings)
-For examples, please see the sample config(s).
+The general idea is that uzbl by default is very bare bones.  you can send it commands to update settings and perform actions, through various interfaces.
+There is a limited default configuration.  Please see config.h to see what it contains.
+For examples of the possibilities what you can do, please see the sample config(s).
 There are several interfaces to interact with uzbl:
 
 * uzbl --config <filename>: <filename> will be read line by line, and the commands in it will be executed.  useful to configure uzbl at startup.
@@ -142,6 +143,8 @@ actions follows:
 * `forward`
 * `scroll_vert <amount>`
 * `scroll_horz <amount>`
+   - amount is given in pixels(?) or as a percentage of the size of the view
+   - set amount to 100% to scroll a whole page
 * `scroll_begin`
 * `scroll_end`
 * `reload`
@@ -150,9 +153,11 @@ actions follows:
 * `zoom_in`
 * `zoom_out`
 * `uri <address>`
-* `script <body>`
+* `js <body>`
    - execute the javascript in `<body>`
    - remember that the commands, and thus actions, must not contain line breaks
+* `script <file>`
+   - execute the javascript in `<file>`
 * `toggle_status`
 * `spawn <executable> <additonal args>`
    - runs a command; see EXTERNAL SCRIPTS for details
@@ -164,7 +169,9 @@ actions follows:
 * `exit`
 * `search <string>`
 * `search_reverse <string>`
-* `insert_mode`
+   - search with no string will search for the next/previous occurrence of the string previously searched for
+* `toggle_insert_mode <optional state>`
+   - if the optional state is 0, disable insert mode. If 1, enable insert mode.
 * `runcmd`
    - can be used for running a command such as SET or BIND
 
