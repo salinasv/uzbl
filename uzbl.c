@@ -1300,7 +1300,7 @@ parse_cmd_line(const char *ctl_line) {
     gchar **tokens = NULL;
 
     /* SET command */
-    if(ctl_line[0] == 's' || ctl_line[0] == 'S') {
+    if(!g_strncasecmp(ctl_line, "set", strlen("set"))) {
         tokens = g_regex_split(uzbl.comm.set_regex, ctl_line, 0);
         if(tokens[0][0] == 0) {
             gchar* value = parseenv(g_strdup(tokens[2]));
@@ -1311,7 +1311,7 @@ parse_cmd_line(const char *ctl_line) {
             printf("Error in command: %s\n", tokens[0]);
     }
     /* GET command */
-    else if(ctl_line[0] == 'g' || ctl_line[0] == 'G') {
+    else if(!g_strncasecmp(ctl_line, "get", strlen("get"))) {
         tokens = g_regex_split(uzbl.comm.get_regex, ctl_line, 0);
         if(tokens[0][0] == 0) {
             get_var_value(tokens[1]);
@@ -1320,7 +1320,7 @@ parse_cmd_line(const char *ctl_line) {
             printf("Error in command: %s\n", tokens[0]);
     }
     /* BIND command */
-    else if(ctl_line[0] == 'b' || ctl_line[0] == 'B') {
+    else if(!g_strncasecmp(ctl_line, "bind", strlen("bind"))) {
         tokens = g_regex_split(uzbl.comm.bind_regex, ctl_line, 0);
         if(tokens[0][0] == 0) {
             gchar* value = parseenv(g_strdup(tokens[2]));
@@ -1331,7 +1331,7 @@ parse_cmd_line(const char *ctl_line) {
             printf("Error in command: %s\n", tokens[0]);
     }
     /* ACT command */
-    else if(ctl_line[0] == 'A' || ctl_line[0] == 'a') {
+    else if(!g_strncasecmp(ctl_line, "act", strlen("act"))) {
         tokens = g_regex_split(uzbl.comm.act_regex, ctl_line, 0);
         if(tokens[0][0] == 0) {
             parse_command(tokens[1], tokens[2]);
@@ -1340,7 +1340,7 @@ parse_cmd_line(const char *ctl_line) {
             printf("Error in command: %s\n", tokens[0]);
     }
     /* KEYCMD command */
-    else if(ctl_line[0] == 'K' || ctl_line[0] == 'k') {
+    else if(!g_strncasecmp(ctl_line, "keycmd", strlen("keycmd"))) {
         tokens = g_regex_split(uzbl.comm.keycmd_regex, ctl_line, 0);
         if(tokens[0][0] == 0) {
             /* should incremental commands want each individual "keystroke"
