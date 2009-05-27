@@ -1475,7 +1475,7 @@ parse_cmd_line(const char *ctl_line) {
     }
     else {
         /* SET command */
-        if(!g_strncasecmp(ctl_line, "set", strlen("set"))) {
+        if(ctl_line[0] == 's' || ctl_line[0] == 'S') {
             tokens = g_regex_split(uzbl.comm.set_regex, ctl_line, 0);
             if(tokens[0][0] == 0) {
                 gchar* value = parseenv(g_strdup(tokens[2]));
@@ -1486,16 +1486,14 @@ parse_cmd_line(const char *ctl_line) {
                 printf("Error in command: %s\n", tokens[0]);
         }
         /* GET command */
-        else if(!g_strncasecmp(ctl_line, "get", strlen("get"))) {
+        else if(ctl_line[0] == 'g' || ctl_line[0] == 'G') {
             tokens = g_regex_split(uzbl.comm.get_regex, ctl_line, 0);
             if(tokens[0][0] == 0) {
                 get_var_value(tokens[1]);
             }
-            else
-                printf("Error in command: %s\n", tokens[0]);
         }
         /* BIND command */
-        else if(!g_strncasecmp(ctl_line, "bind", strlen("bind"))) {
+        else if(ctl_line[0] == 'b' || ctl_line[0] == 'B') {
             tokens = g_regex_split(uzbl.comm.bind_regex, ctl_line, 0);
             if(tokens[0][0] == 0) {
                 gchar* value = parseenv(g_strdup(tokens[2]));
@@ -1506,7 +1504,7 @@ parse_cmd_line(const char *ctl_line) {
                 printf("Error in command: %s\n", tokens[0]);
         }
         /* ACT command */
-        else if(!g_strncasecmp(ctl_line, "act", strlen("act"))) {
+        else if(ctl_line[0] == 'A' || ctl_line[0] == 'a') {
             tokens = g_regex_split(uzbl.comm.act_regex, ctl_line, 0);
             if(tokens[0][0] == 0) {
                 parse_command(tokens[1], tokens[2]);
@@ -1515,7 +1513,7 @@ parse_cmd_line(const char *ctl_line) {
                 printf("Error in command: %s\n", tokens[0]);
         }
         /* KEYCMD command */
-        else if(!g_strncasecmp(ctl_line, "keycmd", strlen("keycmd"))) {
+        else if(ctl_line[0] == 'K' || ctl_line[0] == 'k') {
             tokens = g_regex_split(uzbl.comm.keycmd_regex, ctl_line, 0);
             if(tokens[0][0] == 0) {
                 /* should incremental commands want each individual "keystroke"
@@ -1524,6 +1522,7 @@ parse_cmd_line(const char *ctl_line) {
                 run_keycmd(FALSE);
                 if (g_strstr_len(ctl_line, 7, "n") || g_strstr_len(ctl_line, 7, "N"))
                     run_keycmd(TRUE);
+                update_title();
                 update_title();
             }
         }
