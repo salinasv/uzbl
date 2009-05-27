@@ -78,6 +78,10 @@ typedef struct {
     WebKitWebView* web_view;
     gchar*         main_title;
 
+    /* WebInspector */
+    GtkWidget *inspector_window;
+    WebKitWebInspector *inspector;
+
     StatusBar sbar;
 } GUI;
 
@@ -147,11 +151,29 @@ typedef struct {
     gchar*   modkey;
     guint    modmask;
     guint    http_debug;
+    gchar*   shell_cmd;
+    /* WebKitWebSettings exports */
     guint    font_size;
     guint    monospace_size;
     guint    minimum_font_size;
     guint    disable_plugins;
-    gchar*   shell_cmd;
+    guint    disable_scripts;
+    guint    autoload_img;    
+    guint    autoshrink_img;  
+    guint    enable_spellcheck;
+    guint    enable_private;  
+    guint    print_bg;        
+    gchar*   style_uri;       
+    guint    resizable_txt;  
+    gchar*   default_encoding;       
+    guint    enforce_96dpi;  
+    gchar    *inject_html;
+    guint    caret_browsing;  
+    guint    mode;  
+    gchar*   base_url;
+    gchar*   html_endmarker;
+    GString* html_buffer;
+    guint    html_timeout;  
 
     /* command list: name -> Command  */
     GHashTable* commands;
@@ -221,6 +243,9 @@ catch_sigterm(int s);
 
 static sigfunc *
 setup_signal(int signe, sigfunc *shandler);
+
+static gboolean
+set_var_value(gchar *name, gchar *val);
 
 static gboolean
 new_window_cb (WebKitWebView *web_view, WebKitWebFrame *frame, WebKitNetworkRequest *request, WebKitWebNavigationAction *navigation_action, WebKitWebPolicyDecision *policy_decision, gpointer user_data);
@@ -337,6 +362,9 @@ key_press_cb (GtkWidget* window, GdkEventKey* event);
 static void
 run_keycmd(const gboolean key_ret);
 
+static void
+exec_paramcmd(const Action* act, const guint i);
+
 static GtkWidget*
 create_browser ();
 
@@ -371,17 +399,30 @@ static void
 search_reverse_text (WebKitWebView *page, GArray *argv);
 
 static void
+dehilight (WebKitWebView *page, GArray *argv);
+
+static void
 run_js (WebKitWebView * web_view, GArray *argv);
 
 static void
 run_external_js (WebKitWebView * web_view, GArray *argv);
 
 static void handle_cookies (SoupSession *session,
-							SoupMessage *msg,
-							gpointer     user_data);
+                            SoupMessage *msg,
+                            gpointer     user_data);
 static void
 save_cookies (SoupMessage *msg,
-			  gpointer     user_data);
+                gpointer     user_data);
+
+static void
+set_var(WebKitWebView *page, GArray *argv);
+
+static void
+render_html();
+
+static void
+set_timeout(int seconds);
+
 
 /* Command callbacks */
 static void
@@ -418,6 +459,9 @@ static void
 cmd_disable_plugins();
 
 static void
+cmd_disable_scripts();
+
+static void
 cmd_minimum_font_size();
 
 static void
@@ -432,8 +476,37 @@ cmd_modkey();
 static void
 cmd_useragent() ;
 
+static void
+cmd_autoload_img();
 
+static void
+cmd_autoshrink_img();
 
+static void
+cmd_enable_spellcheck();
 
+static void
+cmd_enable_private();
+
+static void
+cmd_print_bg();
+
+static void 
+cmd_style_uri();
+
+static void 
+cmd_resizable_txt();
+
+static void 
+cmd_default_encoding();
+
+static void 
+cmd_enforce_96dpi();
+
+static void
+cmd_inject_html();
+
+static void 
+cmd_caret_browsing();
 
 /* vi: set et ts=4: */

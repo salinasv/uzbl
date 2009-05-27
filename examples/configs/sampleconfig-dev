@@ -15,9 +15,42 @@ set cookie_handler   = spawn ./examples/scripts/cookies.sh
 
 set minimum_font_size = 6
 set font_size = 11
-# monospace_size defaults to font_size, but you can alter it independently
+## monospace_size defaults to font_size, but you can alter it independently
 #set monospace_size = 10
 
+## Display or supress images within html sites
+#set autoload_images = 0
+
+## Shrink images to window size
+#set autoshrink_images = 0
+
+## Spellchecker
+#set enable_spellcheck = 1
+
+## Private browsing
+#set enbale_private = 0
+
+## The URI of a stylesheet that is applied to every page
+#set stylesheet_uri = http://www.user.com/mystylelesheet.css
+
+## enable/disable JavaScript
+#set disbale_scripts = 1
+
+## Whether text areas are resizable
+#set resizeable_text_areas = 1
+
+## The default encoding used to display text
+#set default_encoding = iso-8859-1
+
+## Whether background images should be printed
+#set print_background = 0
+
+## Enforce a resolution of 96 DPI. This is meant for compatibility with
+## web pages which cope badly with different screen resolutions
+#set enforce_96_dpi = 1
+
+
+#
 # use with bind ... = sh <shell-oneliner>
 set shell_cmd         = sh -c
 
@@ -117,6 +150,11 @@ bind za = spawn ./examples/scripts/formfiller.sh
 bind ze = spawn ./examples/scripts/formfiller.sh edit
 bind zn = spawn ./examples/scripts/formfiller.sh new
 bind zl = spawn ./examples/scripts/formfiller.sh load
+
+# other - more advanced - implementation using perl: (could not get this to run - Dieter )
+bind LL = spawn ./examples/scripts/formfiller.pl load
+bind LN = spawn ./examples/scripts/formfiller.pl new
+bind LE = spawn ./examples/scripts/formfiller.pl edit
 
 # we ship some javascripts to do keyboard based link hinting/following.  (webkit does not have C DOM bindings yet)
 # this is similar to how it works in vimperator (and konqueror)

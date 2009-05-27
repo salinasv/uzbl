@@ -41,6 +41,7 @@
 #include <sys/types.h>
 #include <sys/un.h>
 #include <sys/utsname.h>
+#include <sys/time.h>
 #include <webkit/webkit.h>
 #include <stdio.h>
 #include <string.h>
@@ -59,16 +60,22 @@
 static Uzbl uzbl;
 typedef void (*Command)(WebKitWebView*, GArray *argv);
 
+
+
 /* commandline arguments (set initial values for the state variables) */
-static GOptionEntry entries[] =
+static const 
+GOptionEntry entries[] =
 {
-    { "uri",     'u', 0, G_OPTION_ARG_STRING, &uzbl.state.uri,           "Uri to load at startup (equivalent to 'set uri = URI')", "URI" },
-    { "verbose", 'v', 0, G_OPTION_ARG_NONE,   &uzbl.state.verbose,       "Whether to print all messages or just errors.", NULL },
-    { "name",    'n', 0, G_OPTION_ARG_STRING, &uzbl.state.instance_name, "Name of the current instance (defaults to Xorg window id)", "NAME" },
-    { "config",  'c', 0, G_OPTION_ARG_STRING, &uzbl.state.config_file,   "Config file (this is pretty much equivalent to uzbl < FILE )", "FILE" },
+    { "uri",     'u', 0, G_OPTION_ARG_STRING, &uzbl.state.uri,
+        "Uri to load at startup (equivalent to 'set uri = URI')", "URI" },
+    { "verbose", 'v', 0, G_OPTION_ARG_NONE,   &uzbl.state.verbose,
+        "Whether to print all messages or just errors.", NULL },
+    { "name",    'n', 0, G_OPTION_ARG_STRING, &uzbl.state.instance_name, 
+        "Name of the current instance (defaults to Xorg window id)", "NAME" },
+    { "config",  'c', 0, G_OPTION_ARG_STRING, &uzbl.state.config_file,   
+        "Config file (this is pretty much equivalent to uzbl < FILE )", "FILE" },
     { NULL,      0, 0, 0, NULL, NULL, NULL }
 };
-
 
 /* associate command names to their properties */
 typedef const struct {
@@ -89,6 +96,11 @@ const struct {
 /*    variable name         pointer to variable in code          type  callback function    */
 /*  --------------------------------------------------------------------------------------- */
     { "uri",                 PTR(uzbl.state.uri,                  STR, cmd_load_uri)},
+    { "mode",                PTR(uzbl.behave.mode,                INT, NULL)},
+    { "inject_html",         PTR(uzbl.behave.inject_html,         STR, cmd_inject_html)},
+    { "base_url",            PTR(uzbl.behave.base_url,            STR, NULL)},
+    { "html_endmarker",      PTR(uzbl.behave.html_endmarker,      STR, NULL)},
+    { "html_mode_timeout",   PTR(uzbl.behave.html_timeout,        INT, NULL)},
     { "status_message",      PTR(uzbl.gui.sbar.msg,               STR, update_title)},
     { "show_status",         PTR(uzbl.behave.show_status,         INT, cmd_set_status)},
     { "status_top",          PTR(uzbl.behave.status_top,          INT, move_statusbar)},
@@ -112,15 +124,28 @@ const struct {
     { "fifo_dir",            PTR(uzbl.behave.fifo_dir,            STR, cmd_fifo_dir)},
     { "socket_dir",          PTR(uzbl.behave.socket_dir,          STR, cmd_socket_dir)},
     { "http_debug",          PTR(uzbl.behave.http_debug,          INT, cmd_http_debug)},
-    { "font_size",           PTR(uzbl.behave.font_size,           INT, cmd_font_size)},
-    { "monospace_size",      PTR(uzbl.behave.monospace_size,      INT, cmd_font_size)},
-    { "minimum_font_size",   PTR(uzbl.behave.minimum_font_size,   INT, cmd_minimum_font_size)},
-    { "disable_plugins",     PTR(uzbl.behave.disable_plugins,     INT, cmd_disable_plugins)},
     { "shell_cmd",           PTR(uzbl.behave.shell_cmd,           STR, NULL)},
     { "proxy_url",           PTR(uzbl.net.proxy_url,              STR, set_proxy_url)},
     { "max_conns",           PTR(uzbl.net.max_conns,              INT, cmd_max_conns)},
     { "max_conns_host",      PTR(uzbl.net.max_conns_host,         INT, cmd_max_conns_host)},
     { "useragent",           PTR(uzbl.net.useragent,              STR, cmd_useragent)},
+    /* exported WebKitWebSettings properties*/
+    { "font_size",           PTR(uzbl.behave.font_size,           INT, cmd_font_size)},
+    { "monospace_size",      PTR(uzbl.behave.monospace_size,      INT, cmd_font_size)},
+    { "minimum_font_size",   PTR(uzbl.behave.minimum_font_size,   INT, cmd_minimum_font_size)},
+    { "disable_plugins",     PTR(uzbl.behave.disable_plugins,     INT, cmd_disable_plugins)},
+    { "disable_scripts",     PTR(uzbl.behave.disable_scripts,     INT, cmd_disable_scripts)},
+    { "autoload_images",     PTR(uzbl.behave.autoload_img,        INT, cmd_autoload_img)},
+    { "autoshrink_images",   PTR(uzbl.behave.autoshrink_img,      INT, cmd_autoshrink_img)},
+    { "enable_spellcheck",   PTR(uzbl.behave.enable_spellcheck,   INT, cmd_enable_spellcheck)},
+    { "enable_private",      PTR(uzbl.behave.enable_private,      INT, cmd_enable_private)},
+    { "print_backgrounds",   PTR(uzbl.behave.print_bg,            INT, cmd_print_bg)},
+    { "stylesheet_uri",      PTR(uzbl.behave.style_uri,           STR, cmd_style_uri)},
+    { "resizable_text_areas",PTR(uzbl.behave.resizable_txt,       INT, cmd_resizable_txt)},
+    { "default_encoding",    PTR(uzbl.behave.default_encoding,    STR, cmd_default_encoding)},
+    { "enforce_96_dpi",      PTR(uzbl.behave.enforce_96dpi,       INT, cmd_enforce_96dpi)},
+    { "caret_browsing",      PTR(uzbl.behave.caret_browsing,      INT, cmd_caret_browsing)},
+
     { NULL,                  {.ptr = NULL, .type = TYPE_INT, .func = NULL}}
 }, *n2v_p = var_name_to_ptr;
 
@@ -267,6 +292,19 @@ clean_up(void) {
     g_hash_table_destroy(uzbl.behave.commands);
 }
 
+/* used for html_mode_timeout 
+ * be sure to extend this function to use
+ * more timers if needed in other places
+*/
+static void
+set_timeout(int seconds) {
+    struct itimerval t;
+    memset(&t, 0, sizeof t);
+
+    t.it_value.tv_sec =  seconds;
+    t.it_value.tv_usec = 0;
+    setitimer(ITIMER_REAL, &t, NULL);
+}
 
 /* --- SIGNAL HANDLER --- */
 
@@ -282,6 +320,15 @@ catch_sigint(int s) {
     clean_up();
     exit(EXIT_SUCCESS);
 }
+
+static void
+catch_alrm(int s) {
+    (void) s;
+
+    set_var_value("mode", "0");
+    render_html();
+}
+
 
 /* --- CALLBACKS --- */
 
@@ -510,8 +557,10 @@ static struct {char *name; Command command[2];} cmdlist[] =
     { "exit",               {close_uzbl, 0}                },
     { "search",             {search_forward_text, NOSPLIT} },
     { "search_reverse",     {search_reverse_text, NOSPLIT} },
+    { "dehilight",          {dehilight, 0}                 },
     { "toggle_insert_mode", {toggle_insert_mode, 0}        },
-    { "runcmd",             {runcmd, NOSPLIT}              }
+    { "runcmd",             {runcmd, NOSPLIT}              },
+    { "set",                {set_var, NOSPLIT}          }
 };
 
 static void
@@ -551,6 +600,16 @@ new_action(const gchar *name, const gchar *param) {
 static bool
 file_exists (const char * filename) {
     return (access(filename, F_OK) == 0);
+}
+
+static void
+set_var(WebKitWebView *page, GArray *argv) {
+    (void) page;
+    gchar *ctl_line;
+
+    ctl_line = g_strdup_printf("%s %s", "set", argv_idx(argv, 0));
+    parse_cmd_line(ctl_line);
+    g_free(ctl_line);
 }
 
 static void
@@ -648,6 +707,13 @@ static void
 search_reverse_text (WebKitWebView *page, GArray *argv) {
     search_text(page, argv, FALSE);
 }
+
+static void
+dehilight (WebKitWebView *page, GArray *argv) {
+    (void) argv;
+    webkit_web_view_set_highlight_text_matches (page, FALSE);
+}
+
 
 static void
 new_window_load_uri (const gchar * uri) {
@@ -1048,7 +1114,7 @@ spawn_sh_sync(WebKitWebView *web_view, GArray *argv) {
 
     for (i = 1; i < g_strv_length(cmd); i++)
         g_array_prepend_val(argv, cmd[i]);
-
+         
     if (cmd) run_command(cmd[0], g_strv_length(cmd) + 1, (const gchar **) argv->data,
                          TRUE, &uzbl.comm.sync_stdout);
     g_free (spacer);
@@ -1165,9 +1231,14 @@ cmd_http_debug() {
             SOUP_SESSION_FEATURE(uzbl.net.soup_logger));
 }
 
+static WebKitWebSettings*
+view_settings() {
+    return webkit_web_view_get_settings(uzbl.gui.web_view);
+}
+
 static void
 cmd_font_size() {
-    WebKitWebSettings *ws = webkit_web_view_get_settings(uzbl.gui.web_view);
+    WebKitWebSettings *ws = view_settings();
     if (uzbl.behave.font_size > 0) {
         g_object_set (G_OBJECT(ws), "default-font-size", uzbl.behave.font_size, NULL);
     }
@@ -1183,14 +1254,81 @@ cmd_font_size() {
 
 static void
 cmd_disable_plugins() {
-    WebKitWebSettings *ws = webkit_web_view_get_settings(uzbl.gui.web_view);
-    g_object_set (G_OBJECT(ws), "enable-plugins", !uzbl.behave.disable_plugins, NULL);
+    g_object_set (G_OBJECT(view_settings()), "enable-plugins", 
+            !uzbl.behave.disable_plugins, NULL);
+}
+
+static void
+cmd_disable_scripts() {
+    g_object_set (G_OBJECT(view_settings()), "enable-scripts",
+            !uzbl.behave.disable_plugins, NULL);
 }
 
 static void
 cmd_minimum_font_size() {
-    WebKitWebSettings *ws = webkit_web_view_get_settings(uzbl.gui.web_view);
-    g_object_set (G_OBJECT(ws), "minimum-font-size", uzbl.behave.minimum_font_size, NULL);
+    g_object_set (G_OBJECT(view_settings()), "minimum-font-size",
+            uzbl.behave.minimum_font_size, NULL);
+}
+static void
+cmd_autoload_img() {
+    g_object_set (G_OBJECT(view_settings()), "auto-load-images",
+            uzbl.behave.autoload_img, NULL);
+}
+
+
+static void
+cmd_autoshrink_img() {
+    g_object_set (G_OBJECT(view_settings()), "auto-shrink-images",
+            uzbl.behave.autoshrink_img, NULL);
+}
+
+
+static void
+cmd_enable_spellcheck() {
+    g_object_set (G_OBJECT(view_settings()), "enable-spell-checking",
+            uzbl.behave.enable_spellcheck, NULL);
+}
+
+static void
+cmd_enable_private() {
+    g_object_set (G_OBJECT(view_settings()), "enable-private-browsing",
+            uzbl.behave.enable_private, NULL);
+}
+
+static void
+cmd_print_bg() {
+    g_object_set (G_OBJECT(view_settings()), "print-backgrounds",
+            uzbl.behave.print_bg, NULL);
+}
+
+static void 
+cmd_style_uri() {
+    g_object_set (G_OBJECT(view_settings()), "user-stylesheet-uri",
+            uzbl.behave.style_uri, NULL);
+}
+
+static void 
+cmd_resizable_txt() {
+    g_object_set (G_OBJECT(view_settings()), "resizable-text-areas",
+            uzbl.behave.resizable_txt, NULL);
+}
+
+static void 
+cmd_default_encoding() {
+    g_object_set (G_OBJECT(view_settings()), "default-encoding",
+            uzbl.behave.default_encoding, NULL);
+}
+
+static void 
+cmd_enforce_96dpi() {
+    g_object_set (G_OBJECT(view_settings()), "enforce-96-dpi",
+            uzbl.behave.enforce_96dpi, NULL);
+}
+
+static void 
+cmd_caret_browsing() {
+    g_object_set (G_OBJECT(view_settings()), "enable-caret-browsing",
+            uzbl.behave.caret_browsing, NULL);
 }
 
 static void
@@ -1213,6 +1351,14 @@ cmd_fifo_dir() {
 static void
 cmd_socket_dir() {
     uzbl.behave.socket_dir = init_socket(uzbl.behave.socket_dir);
+}
+
+static void
+cmd_inject_html() {
+    if(uzbl.behave.inject_html) {
+        webkit_web_view_load_html_string (uzbl.gui.web_view,
+                uzbl.behave.inject_html, NULL);
+    }
 }
 
 static void
@@ -1279,7 +1425,7 @@ set_var_value(gchar *name, gchar *val) {
             g_free(*c->ptr);
             *c->ptr = g_strdup(val);
         } else if(c->type == TYPE_INT) {
-            int *ip = GPOINTER_TO_INT(c->ptr);
+            int *ip = (int *)c->ptr;
             *ip = (int)strtoul(val, &endp, 10);
         }
 
@@ -1296,72 +1442,102 @@ runcmd(WebKitWebView* page, GArray *argv) {
 }
 
 static void
+render_html() {
+    Behaviour *b = &uzbl.behave;
+
+    if(b->html_buffer->str) {
+        webkit_web_view_load_html_string (uzbl.gui.web_view,
+                b->html_buffer->str, b->base_url);
+        g_string_free(b->html_buffer, TRUE);
+        b->html_buffer = g_string_new("");
+    }
+}
+
+enum {M_CMD, M_HTML};
+static void
 parse_cmd_line(const char *ctl_line) {
     gchar **tokens = NULL;
+    Behaviour *b = &uzbl.behave;
 
-    /* SET command */
-    if(!g_strncasecmp(ctl_line, "set", strlen("set"))) {
-        tokens = g_regex_split(uzbl.comm.set_regex, ctl_line, 0);
-        if(tokens[0][0] == 0) {
-            gchar* value = parseenv(g_strdup(tokens[2]));
-            set_var_value(tokens[1], value);
-            g_free(value);
-        }
-        else
-            printf("Error in command: %s\n", tokens[0]);
-    }
-    /* GET command */
-    else if(!g_strncasecmp(ctl_line, "get", strlen("get"))) {
-        tokens = g_regex_split(uzbl.comm.get_regex, ctl_line, 0);
-        if(tokens[0][0] == 0) {
-            get_var_value(tokens[1]);
-        }
-        else
-            printf("Error in command: %s\n", tokens[0]);
-    }
-    /* BIND command */
-    else if(!g_strncasecmp(ctl_line, "bind", strlen("bind"))) {
-        tokens = g_regex_split(uzbl.comm.bind_regex, ctl_line, 0);
-        if(tokens[0][0] == 0) {
-            gchar* value = parseenv(g_strdup(tokens[2]));
-            add_binding(tokens[1], value);
-            g_free(value);
-        }
-        else
-            printf("Error in command: %s\n", tokens[0]);
-    }
-    /* ACT command */
-    else if(!g_strncasecmp(ctl_line, "act", strlen("act"))) {
-        tokens = g_regex_split(uzbl.comm.act_regex, ctl_line, 0);
-        if(tokens[0][0] == 0) {
-            parse_command(tokens[1], tokens[2]);
-        }
-        else
-            printf("Error in command: %s\n", tokens[0]);
-    }
-    /* KEYCMD command */
-    else if(!g_strncasecmp(ctl_line, "keycmd", strlen("keycmd"))) {
-        tokens = g_regex_split(uzbl.comm.keycmd_regex, ctl_line, 0);
-        if(tokens[0][0] == 0) {
-            /* should incremental commands want each individual "keystroke"
-               sent in a loop or the whole string in one go like now? */
-            g_string_assign(uzbl.state.keycmd, tokens[1]);
-            run_keycmd(FALSE);
-            if (g_strstr_len(ctl_line, 7, "n") || g_strstr_len(ctl_line, 7, "N"))
-                run_keycmd(TRUE);
-            update_title();
-        }
-    }
-    /* Comments */
-    else if(   (ctl_line[0] == '#')
-            || (ctl_line[0] == ' ')
-            || (ctl_line[0] == '\n'))
-        ; /* ignore these lines */
-    else
-        printf("Command not understood (%s)\n", ctl_line);
+    if(b->mode == M_HTML) {
 
-    if(tokens)
-        g_strfreev(tokens);
+        if(!strncmp(b->html_endmarker, ctl_line, strlen(b->html_endmarker))) {
+            set_timeout(0);
+            set_var_value("mode", "0");
+            render_html();
+            return;
+        }
+        else {
+            /* set an alarm to kill us after the timeout */
+            set_timeout(b->html_timeout);
+            g_string_append(b->html_buffer, ctl_line);
+        }
+    }
+    else {
+        /* SET command */
+        if(!g_strncasecmp(ctl_line, "set", strlen("set"))) {
+            tokens = g_regex_split(uzbl.comm.set_regex, ctl_line, 0);
+            if(tokens[0][0] == 0) {
+                gchar* value = parseenv(g_strdup(tokens[2]));
+                set_var_value(tokens[1], value);
+                g_free(value);
+            }
+            else
+                printf("Error in command: %s\n", tokens[0]);
+        }
+        /* GET command */
+        else if(!g_strncasecmp(ctl_line, "get", strlen("get"))) {
+            tokens = g_regex_split(uzbl.comm.get_regex, ctl_line, 0);
+            if(tokens[0][0] == 0) {
+                get_var_value(tokens[1]);
+            }
+            else
+                printf("Error in command: %s\n", tokens[0]);
+        }
+        /* BIND command */
+        else if(!g_strncasecmp(ctl_line, "bind", strlen("bind"))) {
+            tokens = g_regex_split(uzbl.comm.bind_regex, ctl_line, 0);
+            if(tokens[0][0] == 0) {
+                gchar* value = parseenv(g_strdup(tokens[2]));
+                add_binding(tokens[1], value);
+                g_free(value);
+            }
+            else
+                printf("Error in command: %s\n", tokens[0]);
+        }
+        /* ACT command */
+        else if(!g_strncasecmp(ctl_line, "act", strlen("act"))) {
+            tokens = g_regex_split(uzbl.comm.act_regex, ctl_line, 0);
+            if(tokens[0][0] == 0) {
+                parse_command(tokens[1], tokens[2]);
+            }
+            else
+                printf("Error in command: %s\n", tokens[0]);
+        }
+        /* KEYCMD command */
+        else if(!g_strncasecmp(ctl_line, "keycmd", strlen("keycmd"))) {
+            tokens = g_regex_split(uzbl.comm.keycmd_regex, ctl_line, 0);
+            if(tokens[0][0] == 0) {
+                /* should incremental commands want each individual "keystroke"
+                   sent in a loop or the whole string in one go like now? */
+                g_string_assign(uzbl.state.keycmd, tokens[1]);
+                run_keycmd(FALSE);
+                if (g_strstr_len(ctl_line, 7, "n") || g_strstr_len(ctl_line, 7, "N"))
+                    run_keycmd(TRUE);
+                update_title();
+            }
+        }
+        /* Comments */
+        else if(   (ctl_line[0] == '#')
+                || (ctl_line[0] == ' ')
+                || (ctl_line[0] == '\n'))
+            ; /* ignore these lines */
+        else
+            printf("Command not understood (%s)\n", ctl_line);
+
+        if(tokens)
+            g_strfreev(tokens);
+    }
 
     return;
 }
@@ -1645,6 +1821,7 @@ key_press_cb (GtkWidget* window, GdkEventKey* event)
     if (event->keyval == GDK_Escape) {
         g_string_truncate(uzbl.state.keycmd, 0);
         update_title();
+        dehilight(uzbl.gui.web_view, NULL);
         return TRUE;
     }
 
@@ -1683,56 +1860,57 @@ key_press_cb (GtkWidget* window, GdkEventKey* event)
 static void
 run_keycmd(const gboolean key_ret) {
     /* run the keycmd immediately if it isn't incremental and doesn't take args */
-    Action *action;
-    if ((action = g_hash_table_lookup(uzbl.bindings, uzbl.state.keycmd->str))) {
+    Action *act;
+    if ((act = g_hash_table_lookup(uzbl.bindings, uzbl.state.keycmd->str))) {
         g_string_truncate(uzbl.state.keycmd, 0);
-        parse_command(action->name, action->param);
+        parse_command(act->name, act->param);
         return;
     }
 
     /* try if it's an incremental keycmd or one that takes args, and run it */
     GString* short_keys = g_string_new ("");
     GString* short_keys_inc = g_string_new ("");
-    unsigned int i;
+    guint i;
     for (i=0; i<(uzbl.state.keycmd->len); i++) {
         g_string_append_c(short_keys, uzbl.state.keycmd->str[i]);
         g_string_assign(short_keys_inc, short_keys->str);
         g_string_append_c(short_keys, '_');
         g_string_append_c(short_keys_inc, '*');
 
-        gboolean exec_now = FALSE;
-        if ((action = g_hash_table_lookup(uzbl.bindings, short_keys->str))) {
-            if (key_ret) exec_now = TRUE; /* run normal cmds only if return was pressed */
-        } else if ((action = g_hash_table_lookup(uzbl.bindings, short_keys_inc->str))) {
-            if (key_ret) { /* just quit the incremental command on return */
+        if (key_ret && (act = g_hash_table_lookup(uzbl.bindings, short_keys->str))) {
+            /* run normal cmds only if return was pressed */
+            exec_paramcmd(act, i);
+            g_string_truncate(uzbl.state.keycmd, 0);
+            break;
+        } else if ((act = g_hash_table_lookup(uzbl.bindings, short_keys_inc->str))) {
+            if (key_ret)  /* just quit the incremental command on return */
                 g_string_truncate(uzbl.state.keycmd, 0);
-                break;
-            } else exec_now = TRUE; /* always exec incr. commands on keys other than return */
-        }
-
-        if (exec_now) {
-            GString* parampart = g_string_new (uzbl.state.keycmd->str);
-            GString* actionname = g_string_new ("");
-            GString* actionparam = g_string_new ("");
-            g_string_erase (parampart, 0, i+1);
-            if (action->name)
-                g_string_printf (actionname, action->name, parampart->str);
-            if (action->param)
-                g_string_printf (actionparam, action->param, parampart->str);
-            parse_command(actionname->str, actionparam->str);
-            g_string_free (actionname, TRUE);
-            g_string_free (actionparam, TRUE);
-            g_string_free (parampart, TRUE);
-            if (key_ret)
-                g_string_truncate(uzbl.state.keycmd, 0);
+            else exec_paramcmd(act, i); /* otherwise execute the incremental */
             break;
         }
-
+        
         g_string_truncate(short_keys, short_keys->len - 1);
     }
     g_string_free (short_keys, TRUE);
     g_string_free (short_keys_inc, TRUE);
 }
+
+static void
+exec_paramcmd(const Action *act, const guint i) {
+    GString *parampart = g_string_new (uzbl.state.keycmd->str);
+    GString *actionname = g_string_new ("");
+    GString *actionparam = g_string_new ("");
+    g_string_erase (parampart, 0, i+1);
+    if (act->name)
+        g_string_printf (actionname, act->name, parampart->str);
+    if (act->param)
+        g_string_printf (actionparam, act->param, parampart->str);
+    parse_command(actionname->str, actionparam->str);
+    g_string_free(actionname, TRUE);
+    g_string_free(actionparam, TRUE);
+    g_string_free(parampart, TRUE);
+}
+
 
 static GtkWidget*
 create_browser () {
@@ -1949,6 +2127,101 @@ save_cookies (SoupMessage *msg, gpointer user_data){
     g_slist_free(ck);
 }
 
+/* --- WEBINSPECTOR --- */
+static void
+hide_window_cb(GtkWidget *widget, gpointer data) {
+    (void) data;
+
+    gtk_widget_hide(widget);
+}
+
+static WebKitWebView*
+create_inspector_cb (WebKitWebInspector* web_inspector, WebKitWebView* page, gpointer data){
+    (void) data;
+    (void) page;
+    (void) web_inspector;
+    GtkWidget* scrolled_window;
+    GtkWidget* new_web_view;
+    GUI *g = &uzbl.gui;
+
+    g->inspector_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    g_signal_connect(G_OBJECT(g->inspector_window), "delete-event",
+            G_CALLBACK(hide_window_cb), NULL);
+
+    gtk_window_set_title(GTK_WINDOW(g->inspector_window), "Uzbl WebInspector");
+    gtk_window_set_default_size(GTK_WINDOW(g->inspector_window), 400, 300);
+    gtk_widget_show(g->inspector_window);
+
+    scrolled_window = gtk_scrolled_window_new(NULL, NULL);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window),
+            GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+    gtk_container_add(GTK_CONTAINER(g->inspector_window), scrolled_window);
+    gtk_widget_show(scrolled_window);
+
+    new_web_view = webkit_web_view_new();
+    gtk_container_add(GTK_CONTAINER(scrolled_window), new_web_view);
+
+    return WEBKIT_WEB_VIEW(new_web_view);
+}
+
+static gboolean
+inspector_show_window_cb (WebKitWebInspector* inspector){
+    (void) inspector;
+    gtk_widget_show(uzbl.gui.inspector_window);
+    return TRUE;
+}
+
+/* TODO: Add variables and code to make use of these functions */
+static gboolean
+inspector_close_window_cb (WebKitWebInspector* inspector){
+    (void) inspector;
+    return TRUE;
+}
+
+static gboolean
+inspector_attach_window_cb (WebKitWebInspector* inspector){
+    (void) inspector;
+    return FALSE;
+}
+
+static gboolean
+inspector_dettach_window_cb (WebKitWebInspector* inspector){
+    (void) inspector;
+    return FALSE;
+}
+
+static gboolean
+inspector_uri_changed_cb (WebKitWebInspector* inspector){
+    (void) inspector;
+    return FALSE;
+}
+
+static gboolean
+inspector_inspector_destroyed_cb (WebKitWebInspector* inspector){
+    (void) inspector;
+    return FALSE;
+}
+
+static void
+set_up_inspector() {
+    GUI *g = &uzbl.gui;
+    WebKitWebSettings *settings = view_settings();
+    g_object_set(G_OBJECT(settings), "enable-developer-extras", TRUE, NULL);
+
+    uzbl.gui.inspector = webkit_web_view_get_inspector(uzbl.gui.web_view);
+    g_signal_connect (G_OBJECT (g->inspector), "inspect-web-view", G_CALLBACK (create_inspector_cb), NULL);
+    g_signal_connect (G_OBJECT (g->inspector), "show-window", G_CALLBACK (inspector_show_window_cb), NULL);
+    g_signal_connect (G_OBJECT (g->inspector), "close-window", G_CALLBACK (inspector_close_window_cb), NULL);
+    g_signal_connect (G_OBJECT (g->inspector), "attach-window", G_CALLBACK (inspector_attach_window_cb), NULL);
+    g_signal_connect (G_OBJECT (g->inspector), "dettach-window", G_CALLBACK (inspector_dettach_window_cb), NULL);
+    g_signal_connect (G_OBJECT (g->inspector), "destroy", G_CALLBACK (inspector_inspector_destroyed_cb), NULL);
+
+    g_signal_connect (G_OBJECT (g->inspector), "notify::inspected-uri", G_CALLBACK (inspector_uri_changed_cb), NULL);
+}
+
+
+
+/** -- MAIN -- **/
 int
 main (int argc, char* argv[]) {
     gtk_init (&argc, &argv);
@@ -1973,6 +2246,9 @@ main (int argc, char* argv[]) {
         fprintf(stderr, "uzbl: error hooking SIGTERM\n");
     if(setup_signal(SIGINT, catch_sigint) == SIG_ERR)
         fprintf(stderr, "uzbl: error hooking SIGINT\n");
+    if(setup_signal(SIGALRM, catch_alrm) == SIG_ERR)
+        fprintf(stderr, "uzbl: error hooking SIGALARM\n");
+
 
     if(uname(&uzbl.state.unameinfo) == -1)
         g_printerr("Can't retrieve unameinfo.  Your useragent might appear wrong.\n");
@@ -1980,6 +2256,12 @@ main (int argc, char* argv[]) {
     uzbl.gui.sbar.progress_s = g_strdup("=");
     uzbl.gui.sbar.progress_u = g_strdup("·");
     uzbl.gui.sbar.progress_w = 10;
+
+    /* HTML mode defaults*/
+    uzbl.behave.html_buffer = g_string_new("");
+    uzbl.behave.html_endmarker = g_strdup(".");
+    uzbl.behave.html_timeout = 60;
+    uzbl.behave.base_url = g_strdup("http://invalid");
 
     setup_regex();
     setup_scanner();
@@ -2022,6 +2304,9 @@ main (int argc, char* argv[]) {
         gtk_widget_hide(uzbl.gui.mainbar);
     else
         update_title();
+
+    /* WebInspector */
+    set_up_inspector();
 
     create_stdin();
 
