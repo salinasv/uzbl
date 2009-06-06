@@ -150,6 +150,7 @@ typedef struct {
     guint    font_size;
     guint    monospace_size;
     guint    minimum_font_size;
+    gfloat   zoom_level;
     guint    disable_plugins;
     guint    disable_scripts;
     guint    autoload_img;    
@@ -249,6 +250,9 @@ print(WebKitWebView *page, GArray *argv);
 static gboolean
 new_window_cb (WebKitWebView *web_view, WebKitWebFrame *frame, WebKitNetworkRequest *request, WebKitWebNavigationAction *navigation_action, WebKitWebPolicyDecision *policy_decision, gpointer user_data);
 
+static gboolean
+mime_policy_cb(WebKitWebView *web_view, WebKitWebFrame *frame, WebKitNetworkRequest *request, gchar *mime_type,  WebKitWebPolicyDecision *policy_decision, gpointer user_data);
+
 WebKitWebView*
 create_web_view_cb (WebKitWebView  *web_view, WebKitWebFrame *frame, gpointer user_data);
 
@@ -320,7 +324,7 @@ close_uzbl (WebKitWebView *page, GArray *argv);
 
 static gboolean
 run_command(const gchar *command, const guint npre,
-            const gchar **args, const gboolean sync, char **stdout);
+            const gchar **args, const gboolean sync, char **output_stdout);
 
 static void
 spawn(WebKitWebView *web_view, GArray *argv);
@@ -475,8 +479,13 @@ cmd_max_conns();
 static void
 cmd_max_conns_host();
 
+/* exported WebKitWebSettings properties */
+
 static void
 cmd_font_size();
+
+static void
+cmd_zoom_level();
 
 static void
 cmd_disable_plugins();

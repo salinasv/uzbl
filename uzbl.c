@@ -32,6 +32,7 @@
 
 #define LENGTH(x) (sizeof x / sizeof x[0])
 #define MAX_BINDINGS 256
+#define _POSIX_SOURCE
 
 #include <gtk/gtk.h>
 #include <gdk/gdkx.h>
@@ -43,16 +44,14 @@
 #include <sys/utsname.h>
 #include <sys/time.h>
 #include <webkit/webkit.h>
+#include <libsoup/soup.h>
+
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <string.h>
 #include <fcntl.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <libsoup/soup.h>
 #include <signal.h>
 #include "uzbl.h"
 #include "config.h"
@@ -85,7 +84,7 @@ typedef const struct {
     void (*func)(void);
 } uzbl_cmdprop;
 
-enum {TYPE_INT, TYPE_STR};
+enum {TYPE_INT, TYPE_STR, TYPE_FLOAT};
 
 /* an abbreviation to help keep the table's width humane */
 #define PTR(var, t, d, fun) { .ptr = (void*)&(var), .type = TYPE_##t, .dump = d, .func = fun }
@@ -133,7 +132,8 @@ const struct {
     { "max_conns",           PTR(uzbl.net.max_conns,              INT,  1,   cmd_max_conns)},
     { "max_conns_host",      PTR(uzbl.net.max_conns_host,         INT,  1,   cmd_max_conns_host)},
     { "useragent",           PTR(uzbl.net.useragent,              STR,  1,   cmd_useragent)},
-    /* exported WebKitWebSettings properties*/
+    /* exported WebKitWebSettings properties */
+    { "zoom_level",          PTR(uzbl.behave.zoom_level,          FLOAT,1,   cmd_zoom_level)},
     { "font_size",           PTR(uzbl.behave.font_size,           INT,  1,   cmd_font_size)},
     { "monospace_size",      PTR(uzbl.behave.monospace_size,      INT,  1,   cmd_font_size)},
     { "minimum_font_size",   PTR(uzbl.behave.minimum_font_size,   INT,  1,   cmd_minimum_font_size)},
@@ -393,6 +393,23 @@ new_window_cb (WebKitWebView *web_view, WebKitWebFrame *frame, WebKitNetworkRequ
     return (FALSE);
 }
 
+static gboolean
+mime_policy_cb(WebKitWebView *web_view, WebKitWebFrame *frame, WebKitNetworkRequest *request, gchar *mime_type,  WebKitWebPolicyDecision *policy_decision, gpointer user_data) {
+    (void) frame;
+    (void) request;
+    (void) user_data;
+
+    /* If we can display it, let's display it... */
+    if (webkit_web_view_can_show_mime_type (web_view, mime_type)) {
+        webkit_web_policy_decision_use (policy_decision);
+        return TRUE;
+    }
+
+    /* ...everything we can't displayed is downloaded */
+    webkit_web_policy_decision_download (policy_decision);
+    return TRUE;
+}
+
 WebKitWebView*
 create_web_view_cb (WebKitWebView  *web_view, WebKitWebFrame *frame, gpointer user_data) {
     (void) web_view;
@@ -530,6 +547,7 @@ load_start_cb (WebKitWebView* page, WebKitWebFrame* frame, gpointer data) {
     (void) page;
     (void) frame;
     (void) data;
+    uzbl.gui.sbar.load_progress = 0;
     g_string_truncate(uzbl.state.keycmd, 0); // don't need old commands to remain on new page?
     if (uzbl.behave.load_start_handler)
         run_handler(uzbl.behave.load_start_handler, "");
@@ -583,7 +601,6 @@ VIEWFUNC(go_forward)
 #undef VIEWFUNC
 
 /* -- command to callback/function map for things we cannot attach to any signals */
-// TODO: reload
 static struct {char *name; Command command[2];} cmdlist[] =
 {   /* key                   function      no_split      */
     { "back",               {view_go_back, 0}              },
@@ -717,7 +734,11 @@ static void
 load_uri (WebKitWebView *web_view, GArray *argv) {
     if (argv_idx(argv, 0)) {
         GString* newuri = g_string_new (argv_idx(argv, 0));
-        if (g_strrstr (argv_idx(argv, 0), "://") == NULL)
+        if (g_strstr_len (argv_idx(argv, 0), 11, "javascript:") != NULL) {
+            run_js(web_view, argv);
+            return;
+        }
+        if (g_strrstr (argv_idx(argv, 0), "://") == NULL && g_strstr_len (argv_idx(argv, 0), 5, "data:") == NULL)
             g_string_prepend (newuri, "http://");
         /* if we do handle cookies, ask our handler for them */
         webkit_web_view_load_uri (web_view, newuri->str);
@@ -953,7 +974,7 @@ expand_template(const char *template, gboolean escape_markup) {
          token = g_scanner_get_next_token(uzbl.scan);
 
          if(token == G_TOKEN_SYMBOL) {
-             sym = (int)g_scanner_cur_value(uzbl.scan).v_symbol;
+             sym = GPOINTER_TO_INT(g_scanner_cur_value(uzbl.scan).v_symbol);
              switch(sym) {
                  case SYM_URI:
                      if(escape_markup) {
@@ -1096,7 +1117,7 @@ sharg_append(GArray *a, const gchar *str) {
 // make sure that the args string you pass can properly be interpreted (eg properly escaped against whitespace, quotes etc)
 static gboolean
 run_command (const gchar *command, const guint npre, const gchar **args,
-             const gboolean sync, char **stdout) {
+             const gboolean sync, char **output_stdout) {
    //command <uzbl conf> <uzbl pid> <uzbl win id> <uzbl fifo file> <uzbl socket file> [args]
     GError *err = NULL;
     
@@ -1120,10 +1141,10 @@ run_command (const gchar *command, const guint npre, const gchar **args,
     
     gboolean result;
     if (sync) {
-        if (*stdout) *stdout = strfree(*stdout);
+        if (*output_stdout) *output_stdout = strfree(*output_stdout);
         
         result = g_spawn_sync(NULL, (gchar **)a->data, NULL, G_SPAWN_SEARCH_PATH,
-                              NULL, NULL, stdout, NULL, NULL, &err);
+                              NULL, NULL, output_stdout, NULL, NULL, &err);
     } else result = g_spawn_async(NULL, (gchar **)a->data, NULL, G_SPAWN_SEARCH_PATH,
                                   NULL, NULL, NULL, &err);
 
@@ -1137,8 +1158,8 @@ run_command (const gchar *command, const guint npre, const gchar **args,
         g_string_append_printf(s, " -- result: %s", (result ? "true" : "false"));
         printf("%s\n", s->str);
         g_string_free(s, TRUE);
-        if(stdout) {
-            printf("Stdout: %s\n", *stdout);
+        if(output_stdout) {
+            printf("Stdout: %s\n", *output_stdout);
         }
     }
     if (err) {
@@ -1352,6 +1373,11 @@ cmd_font_size() {
 }
 
 static void
+cmd_zoom_level() {
+    webkit_web_view_set_zoom_level (uzbl.gui.web_view, uzbl.behave.zoom_level);
+}
+
+static void
 cmd_disable_plugins() {
     g_object_set (G_OBJECT(view_settings()), "enable-plugins", 
             !uzbl.behave.disable_plugins, NULL);
@@ -1530,6 +1556,11 @@ set_var_value(gchar *name, gchar *val) {
             int *ip = (int *)c->ptr;
             buf = expand_vars(val);
             *ip = (int)strtoul(buf, &endp, 10);
+            g_free(buf);
+        } else if (c->type == TYPE_FLOAT) {
+            float *fp = (float *)c->ptr;
+            buf = expand_vars(val);
+            *fp = strtod(buf, &endp);
             g_free(buf);
         }
 
@@ -1981,6 +2012,7 @@ create_browser () {
     g_signal_connect (G_OBJECT (g->web_view), "new-window-policy-decision-requested", G_CALLBACK (new_window_cb), g->web_view);
     g_signal_connect (G_OBJECT (g->web_view), "download-requested", G_CALLBACK (download_cb), g->web_view);
     g_signal_connect (G_OBJECT (g->web_view), "create-web-view", G_CALLBACK (create_web_view_cb), g->web_view);
+    g_signal_connect (G_OBJECT (g->web_view), "mime-type-policy-decision-requested", G_CALLBACK (mime_policy_cb), g->web_view);
 
     return scrolled_window;
 }
@@ -2129,6 +2161,8 @@ add_binding (const gchar *key, const gchar *act) {
         printf ("Binding %-10s : %s\n", key, act);
     action = new_action(parts[0], parts[1]);
 
+    if (g_hash_table_remove (uzbl.bindings, key))
+        g_warning ("Overwriting existing binding for \"%s\"", key);
     g_hash_table_replace(uzbl.bindings, g_strdup(key), action);
     g_strfreev(parts);
 }
@@ -2212,7 +2246,7 @@ settings_init () {
             printf ("No configuration file loaded.\n");
     }
 
-    g_signal_connect(n->soup_session, "request-queued", G_CALLBACK(handle_cookies), NULL);
+    g_signal_connect_after(n->soup_session, "request-started", G_CALLBACK(handle_cookies), NULL);
 }
 
 static void handle_cookies (SoupSession *session, SoupMessage *msg, gpointer user_data){
